@@ -1,0 +1,10 @@
+kaggle
+transformers
+datasets
+evaluate
+huggingface_hub
+jiwer
+tensorboardX
+wandb
+librosa
+soundfile

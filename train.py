@@ -112,7 +112,7 @@ if __name__ == "__main__":
         batch["labels"] = tokenizer(clean_text(batch["sentence"])).input_ids
         return batch
 
-    dataset = dataset.map(prepare_dataset, remove_columns=dataset["train"].column_names, num_proc=args.dataloader_num_workers)
+    processed_dataset = dataset.map(prepare_dataset, remove_columns=dataset["train"].column_names, num_proc=args.dataloader_num_workers)
 
     logger.info("Done preparing dataset.")
 
@@ -138,10 +138,10 @@ if __name__ == "__main__":
         data_collator=data_collator,
         args=training_args,
         compute_metrics=get_compute_metrics_func(processor=processor),
-        train_dataset=dataset["train"],
+        train_dataset=processed_dataset["train"],
         eval_dataset={
-            "validation": dataset["validation"],
-            "example": dataset["example"],
+            "validation": processed_dataset["validation"],
+            "example": processed_dataset["example"],
         },
         tokenizer=processor.feature_extractor,
     )

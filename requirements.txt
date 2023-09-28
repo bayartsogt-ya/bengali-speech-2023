@@ -1,5 +1,5 @@
 kaggle
-transformers
+transformers[torch]
 datasets
 evaluate
 huggingface_hub

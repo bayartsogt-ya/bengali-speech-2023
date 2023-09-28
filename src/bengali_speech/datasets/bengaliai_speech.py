@@ -60,6 +60,9 @@ def read_bengaliai_speech_2023_using_hf_datasets(path_to_data: str) -> DatasetDi
     ds_train = ds.filter(lambda x: x["split"] == "train")
     ds_valid = ds.filter(lambda x: x["split"] == "valid")
 
+    ds_train = ds_train.remove_columns(["split"])
+    ds_valid = ds_valid.remove_columns(["split"])
+
     dataset = DatasetDict({
         "train": ds_train,
         "validation": ds_valid,

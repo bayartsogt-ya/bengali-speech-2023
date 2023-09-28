@@ -89,7 +89,6 @@ if __name__ == "__main__":
     log_title_with_multiple_lines("Reading data, tokenizer, and feature extractor.")
     dataset = read_bengaliai_speech_2023_using_hf_datasets(path_to_data="data/bengaliai-speech")
     logger.info(dataset)
-    logger.info(f"Hash of the Dataset: {dataset['train']._fingerprint, dataset['train'].cache_files}")
 
     # load tokenizer
     if args.tokenizer_name:
@@ -110,7 +109,6 @@ if __name__ == "__main__":
     dataset = dataset.map(clean_text, num_proc=args.num_proc)
     logger.info("After cleaning:")
     logger.info(dataset)
-    logger.info(f"Hash of the Dataset: {dataset['train']._fingerprint, dataset['train'].cache_files}")
 
     # def filter_by_length(batch):
     #     duration = batch["audio"]["array"].shape[0] / batch["audio"]["sampling_rate"]
@@ -126,7 +124,7 @@ if __name__ == "__main__":
         batch["labels"] = tokenizer(batch["sentence"]).input_ids
         return batch
 
-    processed_dataset = dataset.map(prepare_dataset, remove_columns=dataset["train"].column_names, num_proc=args.num_proc, writer_batch_size=200, keep_in_memory=False)
+    dataset = dataset.map(prepare_dataset, remove_columns=dataset["train"].column_names, num_proc=args.num_proc)
 
     logger.info("Done preparing dataset.")
 
@@ -152,10 +150,10 @@ if __name__ == "__main__":
         data_collator=data_collator,
         args=training_args,
         compute_metrics=get_compute_metrics_func(processor=processor),
-        train_dataset=processed_dataset["train"],
+        train_dataset=dataset["train"],
         eval_dataset={
-            "validation": processed_dataset["validation"],
-            "example": processed_dataset["example"],
+            "validation": dataset["validation"],
+            "example": dataset["example"],
         },
         tokenizer=processor.feature_extractor,
     )

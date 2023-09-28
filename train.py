@@ -101,13 +101,13 @@ if __name__ == "__main__":
     keep_chars = "".join(tokenizer.vocab)
     logger.critical("Keep only following characters: %s", keep_chars)
 
-    def clean_text(batch):
-        batch["sentence"] = re.sub(f"[^{keep_chars}]", "", batch["sentence"])
-        return batch
+    # def clean_text(batch):
+    #     batch["sentence"] = re.sub(f"[^{keep_chars}]", "", batch["sentence"])
+    #     return batch
     
-    dataset = dataset.map(clean_text, num_proc=args.num_proc)
-    logger.info("After cleaning:")
-    logger.info(dataset)
+    # dataset = dataset.map(clean_text, num_proc=args.num_proc)
+    # logger.info("After cleaning:")
+    # logger.info(dataset)
 
     # def filter_by_length(batch):
     #     duration = batch["audio"]["array"].shape[0] / batch["audio"]["sampling_rate"]
@@ -124,7 +124,7 @@ if __name__ == "__main__":
         batch["labels"] = tokenizer(batch["sentence"]).input_ids
         return batch
 
-    processed_dataset = dataset.map(prepare_dataset, remove_columns=dataset["train"].column_names, num_proc=args.num_proc)
+    processed_dataset = dataset.map(prepare_dataset, remove_columns=dataset["train"].column_names, num_proc=args.num_proc, writer_batch_size=200, keep_in_memory=False)
 
     logger.info("Done preparing dataset.")
 

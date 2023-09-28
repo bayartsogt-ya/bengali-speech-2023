@@ -109,23 +109,19 @@ if __name__ == "__main__":
     logger.info("After cleaning:")
     logger.info(dataset)
 
-    def filter_by_length(batch):
-        duration = batch["audio"]["array"].shape[0] / batch["audio"]["sampling_rate"]
-        return 2 < duration < 10
+    # def filter_by_length(batch):
+    #     duration = batch["audio"]["array"].shape[0] / batch["audio"]["sampling_rate"]
+    #     return 2 < duration < 10
 
-    dataset = dataset.filter(filter_by_length, num_proc=args.num_proc)
-    logger.info("After filtering:")
-    logger.info(dataset)
+    # dataset = dataset.filter(filter_by_length, num_proc=args.num_proc)
+    # logger.info("After filtering:")
+    # logger.info(dataset)
 
     def prepare_dataset(batch):
-        audio = batch["audio"]
-
         # batched output is "un-batched"
-        batch["input_values"] = processor(audio["array"], sampling_rate=audio["sampling_rate"]).input_values[0]
+        batch["input_values"] = feature_extractor(batch["audio"]["array"], sampling_rate=batch["audio"]["sampling_rate"]).input_values[0]
         batch["input_length"] = len(batch["input_values"])
-
-        with processor.as_target_processor():
-            batch["labels"] = tokenizer(batch["sentence"]).input_ids
+        batch["labels"] = tokenizer(batch["sentence"]).input_ids
         return batch
 
     processed_dataset = dataset.map(prepare_dataset, remove_columns=dataset["train"].column_names, num_proc=args.num_proc)

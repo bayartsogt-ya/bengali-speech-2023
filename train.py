@@ -110,7 +110,8 @@ if __name__ == "__main__":
         # batched output is "un-batched"
         batch["input_values"] = processor(audio["array"], sampling_rate=audio["sampling_rate"]).input_values[0]
         batch["input_length"] = len(batch["input_values"])
-        batch["labels"] = tokenizer(clean_text(batch["sentence"])).input_ids
+        with processor.as_target_processor():
+            batch["labels"] = tokenizer(clean_text(batch["sentence"])).input_ids
         return batch
 
     processed_dataset = dataset.map(prepare_dataset, remove_columns=dataset["train"].column_names, num_proc=args.num_proc)

@@ -112,7 +112,7 @@ if __name__ == "__main__":
         batch["labels"] = tokenizer(clean_text(batch["sentence"])).input_ids
         return batch
 
-    dataset = dataset.map(prepare_dataset, remove_columns=dataset["train"].column_names)
+    dataset = dataset.map(prepare_dataset, remove_columns=dataset["train"].column_names, num_proc=args.dataloader_num_workers)
 
     logger.info("Done preparing dataset.")
 

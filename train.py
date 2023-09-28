@@ -33,6 +33,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--num_train_epochs", type=int, default=1)
     parser.add_argument("--dataloader_num_workers", type=int, default=12)
+    parser.add_argument("--num_proc", type=int, default=None)
     parser.add_argument("--to_kaggle", action="store_true")
     parser.add_argument("--push_to_hub", action="store_true")
     args = parser.parse_args()
@@ -112,7 +113,7 @@ if __name__ == "__main__":
         batch["labels"] = tokenizer(clean_text(batch["sentence"])).input_ids
         return batch
 
-    processed_dataset = dataset.map(prepare_dataset, remove_columns=dataset["train"].column_names, num_proc=args.dataloader_num_workers)
+    processed_dataset = dataset.map(prepare_dataset, remove_columns=dataset["train"].column_names, num_proc=args.num_proc)
 
     logger.info("Done preparing dataset.")
 

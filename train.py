@@ -44,7 +44,10 @@ if __name__ == "__main__":
     # preprocessing args
     parser.add_argument("--min_sec", type=float, default=2.)
     parser.add_argument("--max_sec", type=float, default=10.)
-    parser.add_argument("--train_percentage", type=float, default=0.3)
+    parser.add_argument("--num_shards_train", type=int, default=None)
+    parser.add_argument("--shard_index_train", type=int, default=0)
+    parser.add_argument("--num_shards_validation", type=int, default=None)
+    parser.add_argument("--shard_index_validation", type=int, default=0)
     args = parser.parse_args()
 
     # print args nicely
@@ -56,10 +59,10 @@ if __name__ == "__main__":
 
     training_args = TrainingArguments(
         output_dir=os.path.join("output", experiment_name),
-        group_by_length=True,
+        # group_by_length=True,
 
         per_device_train_batch_size=args.batch_size,
-        per_device_eval_batch_size=args.batch_size,
+        per_device_eval_batch_size=args.batch_size * 2,
         num_train_epochs=args.num_train_epochs,
         dataloader_num_workers=args.dataloader_num_workers,
         
@@ -73,10 +76,10 @@ if __name__ == "__main__":
         logging_steps=100,
         
         evaluation_strategy="steps",
-        eval_steps=5000,
+        eval_steps=500,
 
         save_strategy="steps",
-        save_steps=5000,
+        save_steps=500,
         save_total_limit=3,
         
         fp16=args.fp16,
@@ -87,14 +90,19 @@ if __name__ == "__main__":
         # report
         push_to_hub=args.push_to_hub,
         metric_for_best_model="eval_validation_wer",
-        # report_to=["tensorboard", "wandb"],
-        report_to="none",
+        report_to=["tensorboard", "wandb"],
+        # report_to="none",
         run_name=experiment_name,
     )
 
+    ######################### DATA PREPROCESSING #########################
     # read bengali speech 2023 competition data
     log_title_with_multiple_lines("Reading data, tokenizer, and feature extractor.")
-    dataset = read_bengaliai_speech_2023_using_hf_datasets(path_to_data="data/bengaliai-speech", train_percentage=args.train_percentage)
+    dataset = read_bengaliai_speech_2023_using_hf_datasets(path_to_data="data/bengaliai-speech")
+    if args.num_shards_train:
+        dataset["train"] = dataset["train"].shard(num_shards=args.num_shards_train, index=args.shard_index_train)
+    if args.num_shards_validation:
+        dataset["validation"] = dataset["validation"].shard(num_shards=args.num_shards_validation, index=args.shard_index_validation)
     logger.info(dataset)
 
     # load tokenizer
@@ -112,24 +120,33 @@ if __name__ == "__main__":
     def clean_text(batch):
         batch["sentence"] = re.sub(f"[^{keep_chars}]", "", batch["sentence"])
         return batch
-    
+
     dataset = dataset.map(clean_text, num_proc=args.num_proc)
     logger.info("After cleaning:")
     logger.info(dataset)
 
+    def filter_by_length(batch):
+        duration = batch["audio"]["array"].shape[0] / batch["audio"]["sampling_rate"]
+        return args.min_sec < duration < args.max_sec
+
     if args.min_sec and args.max_sec:
-        filter_by_length = get_filter_by_length_func(min_sec=args.min_sec, max_sec=args.max_sec)
         dataset["train"] = dataset["train"].filter(filter_by_length, num_proc=args.num_proc)
         logger.info("After filtering:")
         logger.info(dataset)
     else:
         logger.info("Skip filtering... (min_sec and max_sec are not set)")
 
-    prepare_dataset = get_prepare_dataset_func(tokenizer=tokenizer, feature_extractor=feature_extractor)
+    def prepare_dataset(batch):
+        batch["input_values"] = feature_extractor(batch["audio"]["array"], sampling_rate=batch["audio"]["sampling_rate"]).input_values[0]
+        batch["input_length"] = len(batch["input_values"])
+        batch["labels"] = tokenizer(batch["sentence"]).input_ids
+        return batch
+
     dataset = dataset.map(prepare_dataset, remove_columns=dataset["train"].column_names, num_proc=args.num_proc, writer_batch_size=1000)
 
     logger.info("Done preparing dataset.")
 
+    ######################### LOAD MODEL AND TRAIN #########################
     # data collator
     data_collator = DataCollatorCTCWithPadding(processor=processor)
 

@@ -40,7 +40,7 @@ def read_bengaliai_speech_2023(path_to_data: str) -> DatasetDict:
 
 
 
-def read_bengaliai_speech_2023_using_hf_datasets(path_to_data: str, train_percentage: int =0.3) -> DatasetDict:
+def read_bengaliai_speech_2023_using_hf_datasets(path_to_data: str) -> DatasetDict:
     st = time.time()
     logger.info("Reading Bengali Speech 2023 competition data...")
 
@@ -60,10 +60,6 @@ def read_bengaliai_speech_2023_using_hf_datasets(path_to_data: str, train_percen
     ds_train = ds.filter(lambda x: x["split"] == "train")
     ds_valid = ds.filter(lambda x: x["split"] == "valid")
 
-    # SLICE THE TRAIN
-    if train_percentage < 1.:
-        ds_train = ds_train.select(range(int(train_percentage * len(ds_train))))
-
     ds_train = ds_train.remove_columns(["split"])
     ds_valid = ds_valid.remove_columns(["split"])
 
@@ -74,7 +70,7 @@ def read_bengaliai_speech_2023_using_hf_datasets(path_to_data: str, train_percen
     })
 
     dataset = dataset.cast_column("audio", Audio(sampling_rate=DEFAULT_RATE))
-
+    logger.info(dataset)
     logger.info(f"Done reading Bengali Speech 2023 competition data in {time.time() - st:.2f}s")
 
     return dataset

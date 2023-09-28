@@ -101,8 +101,11 @@ if __name__ == "__main__":
     keep_chars = "".join(tokenizer.vocab)
     logger.critical("Keep only following characters: %s", keep_chars)
 
-    def clean_text(text: str):
-        return re.sub(f"[^{keep_chars}]", "", text)
+    def clean_text(batch):
+        batch["sentence"] = re.sub(f"[^{keep_chars}]", "", batch["sentence"])
+        return batch
+    
+    dataset = dataset.map(clean_text, num_proc=args.num_proc)
 
     def prepare_dataset(batch):
         audio = batch["audio"]
@@ -110,8 +113,12 @@ if __name__ == "__main__":
         # batched output is "un-batched"
         batch["input_values"] = processor(audio["array"], sampling_rate=audio["sampling_rate"]).input_values[0]
         batch["input_length"] = len(batch["input_values"])
+
+        if batch["input_length"] < 2 * 16_000:
+            return batch
+
         with processor.as_target_processor():
-            batch["labels"] = tokenizer(clean_text(batch["sentence"])).input_ids
+            batch["labels"] = tokenizer(batch["sentence"]).input_ids
         return batch
 
     processed_dataset = dataset.map(prepare_dataset, remove_columns=dataset["train"].column_names, num_proc=args.num_proc)

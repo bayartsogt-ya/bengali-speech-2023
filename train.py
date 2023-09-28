@@ -5,6 +5,7 @@ import re
 import argparse
 import logging
 from bengali_speech.datasets import read_bengaliai_speech_2023_using_hf_datasets
+from bengali_speech.mappers import get_filter_by_length_func, get_prepare_dataset_func
 from bengali_speech.tokenizers import get_default_wav2vec_tokenizer
 from bengali_speech.data_collators import DataCollatorCTCWithPadding
 from bengali_speech.evaluate import get_compute_metrics_func
@@ -30,6 +31,8 @@ if __name__ == "__main__":
     parser.add_argument("--tokenizer_name", type=str, default=None)
     parser.add_argument("--experiment_number", type=int, default=0)
     parser.add_argument("--wav2vec_freeze_feature_extractor", action="store_true")
+
+    # hf training args
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--num_train_epochs", type=int, default=1)
     parser.add_argument("--dataloader_num_workers", type=int, default=12)
@@ -37,6 +40,11 @@ if __name__ == "__main__":
     parser.add_argument("--to_kaggle", action="store_true")
     parser.add_argument("--push_to_hub", action="store_true")
     parser.add_argument("--fp16", action="store_true")
+
+    # preprocessing args
+    parser.add_argument("--min_sec", type=float, default=2.)
+    parser.add_argument("--max_sec", type=float, default=10.)
+    parser.add_argument("--train_percentage", type=float, default=0.3)
     args = parser.parse_args()
 
     # print args nicely
@@ -65,10 +73,10 @@ if __name__ == "__main__":
         logging_steps=100,
         
         evaluation_strategy="steps",
-        eval_steps=0.2,
+        eval_steps=5000,
 
         save_strategy="steps",
-        save_steps=0.2,
+        save_steps=5000,
         save_total_limit=3,
         
         fp16=args.fp16,
@@ -78,14 +86,15 @@ if __name__ == "__main__":
 
         # report
         push_to_hub=args.push_to_hub,
-        metric_for_best_model="validation_wer",
-        report_to=["tensorboard", "wandb"],
+        metric_for_best_model="eval_validation_wer",
+        # report_to=["tensorboard", "wandb"],
+        report_to="none",
         run_name=experiment_name,
     )
 
     # read bengali speech 2023 competition data
     log_title_with_multiple_lines("Reading data, tokenizer, and feature extractor.")
-    dataset = read_bengaliai_speech_2023_using_hf_datasets(path_to_data="data/bengaliai-speech")
+    dataset = read_bengaliai_speech_2023_using_hf_datasets(path_to_data="data/bengaliai-speech", train_percentage=args.train_percentage)
     logger.info(dataset)
 
     # load tokenizer
@@ -108,20 +117,15 @@ if __name__ == "__main__":
     logger.info("After cleaning:")
     logger.info(dataset)
 
-    def filter_by_length(batch):
-        duration = batch["audio"]["array"].shape[0] / batch["audio"]["sampling_rate"]
-        return 5 < duration < 10
+    if args.min_sec and args.max_sec:
+        filter_by_length = get_filter_by_length_func(min_sec=args.min_sec, max_sec=args.max_sec)
+        dataset["train"] = dataset["train"].filter(filter_by_length, num_proc=args.num_proc)
+        logger.info("After filtering:")
+        logger.info(dataset)
+    else:
+        logger.info("Skip filtering... (min_sec and max_sec are not set)")
 
-    dataset = dataset.filter(filter_by_length, num_proc=args.num_proc)
-    logger.info("After filtering:")
-    logger.info(dataset)
-
-    def prepare_dataset(batch):
-        batch["input_values"] = feature_extractor(batch["audio"]["array"], sampling_rate=batch["audio"]["sampling_rate"]).input_values[0]
-        batch["input_length"] = len(batch["input_values"])
-        batch["labels"] = tokenizer(batch["sentence"]).input_ids
-        return batch
-
+    prepare_dataset = get_prepare_dataset_func(tokenizer=tokenizer, feature_extractor=feature_extractor)
     dataset = dataset.map(prepare_dataset, remove_columns=dataset["train"].column_names, num_proc=args.num_proc, writer_batch_size=1000)
 
     logger.info("Done preparing dataset.")

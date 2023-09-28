@@ -9,4 +9,9 @@ python train.py \
     # --num_proc 8 \
     # --fp16 \
     # --to_kaggle \
-    # --push_to_hub
+    # --push_to_hub \
+    
+    # --min_sec "5"\
+    # --max_sec "10" \
+    # --train_percentage "0.3" \
+

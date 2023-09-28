@@ -40,7 +40,7 @@ def read_bengaliai_speech_2023(path_to_data: str) -> DatasetDict:
 
 
 
-def read_bengaliai_speech_2023_using_hf_datasets(path_to_data: str) -> DatasetDict:
+def read_bengaliai_speech_2023_using_hf_datasets(path_to_data: str, train_percentage: int =0.3) -> DatasetDict:
     st = time.time()
     logger.info("Reading Bengali Speech 2023 competition data...")
 
@@ -61,7 +61,8 @@ def read_bengaliai_speech_2023_using_hf_datasets(path_to_data: str) -> DatasetDi
     ds_valid = ds.filter(lambda x: x["split"] == "valid")
 
     # SLICE THE TRAIN
-    ds_train = ds_train.select(range(int(0.3 * len(ds_train))))
+    if train_percentage < 1.:
+        ds_train = ds_train.select(range(int(train_percentage * len(ds_train))))
 
     ds_train = ds_train.remove_columns(["split"])
     ds_valid = ds_valid.remove_columns(["split"])

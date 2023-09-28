@@ -163,3 +163,5 @@ data/
 output/
 wandb/
 notebooks/
+
+.python-version

@@ -26,34 +26,37 @@ logger = logging.getLogger(__name__)
 if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO)
-    logger.info(f"PYTORCH_ENABLE_MPS_FALLBACK = {os.getenv('PYTORCH_ENABLE_MPS_FALLBACK')}")
 
-    # parameters
-    base_model_name = "patrickvonplaten/tiny-wav2vec2-no-tokenizer"
-    tokenizer_name = None
+    # create a parser for variables under parameters and transformers.TrainingArguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--base_model_name", type=str, default="patrickvonplaten/tiny-wav2vec2-no-tokenizer")
+    parser.add_argument("--tokenizer_name", type=str, default=None)
+    parser.add_argument("--experiment_number", type=int, default=0)
+    parser.add_argument("--wav2vec_freeze_feature_extractor", action="store_true")
+    parser.add_argument("--batch_size", type=int, default=32)
+    parser.add_argument("--num_train_epochs", type=int, default=1)
+    parser.add_argument("--dataloader_num_workers", type=int, default=12)
+    parser.add_argument("--to_kaggle", action="store_true")
+    parser.add_argument("--push_to_hub", action="store_true")
+    args = parser.parse_args()
 
-    experiment_number = 0
+    # print args nicely
+    log_title_with_multiple_lines("Arguments:")
+    for arg in vars(args):
+        logger.info("%s: %s", arg, getattr(args, arg))
 
-    wav2vec_freeze_feature_extractor = True
-
-    batch_size = 1
-    num_train_epochs = 1
-    dataloader_num_workers = 1
-
-    to_kaggle = False
-    push_to_hub = False
-
-    experiment_name = f"bengali-2023-{experiment_number:04d}"
+    experiment_name = f"bengali-2023-{args.experiment_number:04d}"
 
     training_args = TrainingArguments(
         output_dir=os.path.join("output", experiment_name),
         group_by_length=True,
 
-        per_device_train_batch_size=batch_size,
-        per_device_eval_batch_size=batch_size,
-        # num_train_epochs=num_train_epochs,
-        max_steps=2,
-        dataloader_num_workers=dataloader_num_workers,
+        per_device_train_batch_size=args.batch_size,
+        per_device_eval_batch_size=args.batch_size,
+        num_train_epochs=args.num_train_epochs,
+        dataloader_num_workers=args.dataloader_num_workers,
+
+        max_steps=10,
         
         # LR
         learning_rate=3e-4,
@@ -62,25 +65,24 @@ if __name__ == "__main__":
         # warmup_steps=500,
 
         # EVAL & SAVE
-        logging_steps=10,
+        logging_steps=100,
         
         evaluation_strategy="steps",
-        eval_steps=2,  # eval 20 times
+        eval_steps=0.2,
 
         save_strategy="steps",
-        save_steps=2,  # save 20 times
+        save_steps=0.2,
         save_total_limit=3,
         
-        fp16=False, # -------------------------------------> fp16
+        fp16=True,
 
         load_best_model_at_end=True,
         log_level="debug",
 
         # report
-        push_to_hub=push_to_hub,
+        push_to_hub=args.push_to_hub,
         metric_for_best_model="validation_wer",
-        # report_to=["tensorboard", "wandb"],
-        report_to="none",
+        report_to=["tensorboard", "wandb"],
         run_name=experiment_name,
     )
 
@@ -90,12 +92,12 @@ if __name__ == "__main__":
     logger.info(dataset)
 
     # load tokenizer
-    if tokenizer_name:
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+    if args.tokenizer_name:
+        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name)
     else:
         tokenizer = get_default_wav2vec_tokenizer()
 
-    feature_extractor = AutoFeatureExtractor.from_pretrained(base_model_name)
+    feature_extractor = AutoFeatureExtractor.from_pretrained(args.base_model_name)
     processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
     keep_chars = "".join(tokenizer.vocab)
@@ -123,14 +125,14 @@ if __name__ == "__main__":
     log_title_with_multiple_lines("Loading Model and Start Training.")
     # load model
     model = Wav2Vec2ForCTC.from_pretrained(
-        base_model_name,
+        args.base_model_name,
         ctc_loss_reduction="mean", 
         pad_token_id=processor.tokenizer.pad_token_id,
         vocab_size=len(processor.tokenizer),
         ignore_mismatched_sizes=True,
     )
 
-    if hasattr(model, "freeze_feature_extractor") and wav2vec_freeze_feature_extractor:
+    if hasattr(model, "freeze_feature_extractor") and args.wav2vec_freeze_feature_extractor:
         logger.info("Freezing a feature extractor.")
         model.freeze_feature_extractor()
 
@@ -142,7 +144,7 @@ if __name__ == "__main__":
         train_dataset=dataset["train"],
         eval_dataset={
             "validation": dataset["validation"],
-            # "example": dataset["example"][:2],
+            "example": dataset["example"],
         },
         tokenizer=processor.feature_extractor,
     )
@@ -155,9 +157,5 @@ if __name__ == "__main__":
     trainer.model.save_pretrained(training_args.output_dir)
     feature_extractor.save_pretrained(training_args.output_dir)
 
-    if to_kaggle:
+    if args.to_kaggle:
         upload_to_kaggle(experiment_name)
-
-    # create a kaggle dataset from trainer output.
-    # https://www.kaggle.com/docs/api
-    # kaggle datasets create -p bengali-2023-000

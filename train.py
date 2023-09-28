@@ -17,9 +17,6 @@ from transformers import Trainer
 from transformers import TrainingArguments
 
 
-
-# ignoring mac error
-
 # set up logging
 logger = logging.getLogger(__name__)
 

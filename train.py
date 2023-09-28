@@ -131,7 +131,7 @@ if __name__ == "__main__":
     logger.info("Done preparing dataset.")
 
     # data collator
-    data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
+    data_collator = DataCollatorCTCWithPadding(processor=processor)
 
     log_title_with_multiple_lines("Loading Model and Start Training.")
     # load model
@@ -143,9 +143,9 @@ if __name__ == "__main__":
         ignore_mismatched_sizes=True,
     )
 
-    if hasattr(model, "freeze_feature_extractor") and args.wav2vec_freeze_feature_extractor:
+    if hasattr(model, "freeze_feature_encoder") and args.wav2vec_freeze_feature_extractor:
         logger.info("Freezing a feature extractor.")
-        model.freeze_feature_extractor()
+        model.freeze_feature_encoder()
 
     trainer = Trainer(
         model=model,

@@ -106,12 +106,16 @@ if __name__ == "__main__":
         return batch
     
     dataset = dataset.map(clean_text, num_proc=args.num_proc)
+    logger.info("After cleaning:")
+    logger.info(dataset)
 
     def filter_by_length(batch):
         duration = batch["audio"]["array"].shape[0] / batch["audio"]["sampling_rate"]
         return 2 < duration < 10
 
     dataset = dataset.filter(filter_by_length, num_proc=args.num_proc)
+    logger.info("After filtering:")
+    logger.info(dataset)
 
     def prepare_dataset(batch):
         audio = batch["audio"]

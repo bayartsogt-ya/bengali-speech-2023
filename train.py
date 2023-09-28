@@ -54,8 +54,6 @@ if __name__ == "__main__":
         per_device_eval_batch_size=args.batch_size,
         num_train_epochs=args.num_train_epochs,
         dataloader_num_workers=args.dataloader_num_workers,
-
-        max_steps=10,
         
         # LR
         learning_rate=3e-4,
@@ -124,7 +122,7 @@ if __name__ == "__main__":
         batch["labels"] = tokenizer(batch["sentence"]).input_ids
         return batch
 
-    dataset = dataset.map(prepare_dataset, remove_columns=dataset["train"].column_names, num_proc=args.num_proc)
+    dataset = dataset.map(prepare_dataset, remove_columns=dataset["train"].column_names, num_proc=args.num_proc, writer_batch_size=1000)
 
     logger.info("Done preparing dataset.")
 
@@ -158,6 +156,7 @@ if __name__ == "__main__":
         tokenizer=processor.feature_extractor,
     )
 
+    logger.info("Start training...")
     train_result = trainer.train()
 
     log_title_with_multiple_lines("Done Training and Uploading Output")

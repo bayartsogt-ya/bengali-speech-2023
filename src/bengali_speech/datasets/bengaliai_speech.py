@@ -60,6 +60,9 @@ def read_bengaliai_speech_2023_using_hf_datasets(path_to_data: str) -> DatasetDi
     ds_train = ds.filter(lambda x: x["split"] == "train")
     ds_valid = ds.filter(lambda x: x["split"] == "valid")
 
+    # SLICE THE TRAIN
+    ds_train = ds_train.select(range(int(0.3 * len(ds_train))))
+
     ds_train = ds_train.remove_columns(["split"])
     ds_valid = ds_valid.remove_columns(["split"])
 
@@ -71,8 +74,6 @@ def read_bengaliai_speech_2023_using_hf_datasets(path_to_data: str) -> DatasetDi
 
     dataset = dataset.cast_column("audio", Audio(sampling_rate=DEFAULT_RATE))
 
-    logger.info(f"Directory to cache: {dataset.cache_files}")
-    logger.info(f"Train dataset column features: {dataset['train'].features}")
     logger.info(f"Done reading Bengali Speech 2023 competition data in {time.time() - st:.2f}s")
 
     return dataset

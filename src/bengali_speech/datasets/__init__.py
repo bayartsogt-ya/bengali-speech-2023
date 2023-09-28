@@ -1,1 +1,1 @@
-from .bengaliai_speech import read_bengaliai_speech_2023
+from .bengaliai_speech import *

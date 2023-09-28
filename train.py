@@ -4,7 +4,7 @@ import os
 import re
 import argparse
 import logging
-from bengali_speech.datasets import read_bengaliai_speech_2023
+from bengali_speech.datasets import read_bengaliai_speech_2023_using_hf_datasets
 from bengali_speech.tokenizers import get_default_wav2vec_tokenizer
 from bengali_speech.data_collators import DataCollatorCTCWithPadding
 from bengali_speech.evaluate import get_compute_metrics_func
@@ -36,6 +36,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_proc", type=int, default=None)
     parser.add_argument("--to_kaggle", action="store_true")
     parser.add_argument("--push_to_hub", action="store_true")
+    parser.add_argument("--fp16", action="store_true")
     args = parser.parse_args()
 
     # print args nicely
@@ -72,7 +73,7 @@ if __name__ == "__main__":
         save_steps=0.2,
         save_total_limit=3,
         
-        fp16=True,
+        fp16=args.fp16,
 
         load_best_model_at_end=True,
         log_level="debug",
@@ -86,8 +87,9 @@ if __name__ == "__main__":
 
     # read bengali speech 2023 competition data
     log_title_with_multiple_lines("Reading data, tokenizer, and feature extractor.")
-    dataset = read_bengaliai_speech_2023(path_to_data="data/bengaliai-speech")
+    dataset = read_bengaliai_speech_2023_using_hf_datasets(path_to_data="data/bengaliai-speech")
     logger.info(dataset)
+    logger.info(f"Hash of the Dataset: {dataset['train']._fingerprint, dataset['train'].cache_files}")
 
     # load tokenizer
     if args.tokenizer_name:
@@ -101,13 +103,14 @@ if __name__ == "__main__":
     keep_chars = "".join(tokenizer.vocab)
     logger.critical("Keep only following characters: %s", keep_chars)
 
-    # def clean_text(batch):
-    #     batch["sentence"] = re.sub(f"[^{keep_chars}]", "", batch["sentence"])
-    #     return batch
+    def clean_text(batch):
+        batch["sentence"] = re.sub(f"[^{keep_chars}]", "", batch["sentence"])
+        return batch
     
-    # dataset = dataset.map(clean_text, num_proc=args.num_proc)
-    # logger.info("After cleaning:")
-    # logger.info(dataset)
+    dataset = dataset.map(clean_text, num_proc=args.num_proc)
+    logger.info("After cleaning:")
+    logger.info(dataset)
+    logger.info(f"Hash of the Dataset: {dataset['train']._fingerprint, dataset['train'].cache_files}")
 
     # def filter_by_length(batch):
     #     duration = batch["audio"]["array"].shape[0] / batch["audio"]["sampling_rate"]
@@ -118,7 +121,6 @@ if __name__ == "__main__":
     # logger.info(dataset)
 
     def prepare_dataset(batch):
-        # batched output is "un-batched"
         batch["input_values"] = feature_extractor(batch["audio"]["array"], sampling_rate=batch["audio"]["sampling_rate"]).input_values[0]
         batch["input_length"] = len(batch["input_values"])
         batch["labels"] = tokenizer(batch["sentence"]).input_ids

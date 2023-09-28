@@ -1,7 +1,7 @@
 import time
 import logging
 import pandas as pd
-from datasets import Dataset, DatasetDict, Audio
+from datasets import Dataset, DatasetDict, Audio, Value
 
 
 logger = logging.getLogger(__name__)
@@ -30,6 +30,10 @@ def read_bengaliai_speech_2023(path_to_data: str) -> DatasetDict:
     })
 
     dataset = dataset.cast_column("audio", Audio(sampling_rate=DEFAULT_RATE))
+    dataset = dataset.cast_column("id", Value("string"))
+    dataset = dataset.cast_column("sentence", Value("string"))
+    logger.info(f"Directory to cache: {dataset.cache_files}")
+    logger.info(f"Train dataset column features: {dataset['train'].features}")
     logger.info(f"Done reading Bengali Speech 2023 competition data in {time.time() - st:.2f}s")
 
     return dataset

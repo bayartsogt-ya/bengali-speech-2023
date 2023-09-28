@@ -107,15 +107,18 @@ if __name__ == "__main__":
     
     dataset = dataset.map(clean_text, num_proc=args.num_proc)
 
+    def filter_by_length(batch):
+        duration = batch["audio"]["array"].shape[0] / batch["audio"]["sampling_rate"]
+        return 2 < duration < 10
+
+    dataset = dataset.filter(filter_by_length, num_proc=args.num_proc)
+
     def prepare_dataset(batch):
         audio = batch["audio"]
 
         # batched output is "un-batched"
         batch["input_values"] = processor(audio["array"], sampling_rate=audio["sampling_rate"]).input_values[0]
         batch["input_length"] = len(batch["input_values"])
-
-        if batch["input_length"] < 2 * 16_000:
-            return batch
 
         with processor.as_target_processor():
             batch["labels"] = tokenizer(batch["sentence"]).input_ids

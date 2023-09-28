@@ -69,7 +69,7 @@ def read_bengaliai_speech_2023_using_hf_datasets(path_to_data: str) -> DatasetDi
         "example": ds_example,
     })
 
-    dataset = dataset.cast_column("audio", Audio(sampling_rate=DEFAULT_RATE))
+    dataset = dataset.remove_columns(["id"])
     logger.info(dataset)
     logger.info(f"Done reading Bengali Speech 2023 competition data in {time.time() - st:.2f}s")
 

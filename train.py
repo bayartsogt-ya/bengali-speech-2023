@@ -17,6 +17,10 @@ from transformers import AutoFeatureExtractor, Wav2Vec2Processor, Wav2Vec2ForCTC
 from transformers import Trainer
 from transformers import TrainingArguments
 
+from datasets import load_dataset, Audio
+
+
+DEFAULT_RATE = 16_000
 
 # set up logging
 logger = logging.getLogger(__name__)
@@ -62,7 +66,7 @@ if __name__ == "__main__":
         # group_by_length=True,
 
         per_device_train_batch_size=args.batch_size,
-        per_device_eval_batch_size=args.batch_size * 2,
+        per_device_eval_batch_size=args.batch_size,
         num_train_epochs=args.num_train_epochs,
         dataloader_num_workers=args.dataloader_num_workers,
         
@@ -95,10 +99,17 @@ if __name__ == "__main__":
         run_name=experiment_name,
     )
 
-    ######################### DATA PREPROCESSING #########################
+    ######################### LOAD DATA #########################
     # read bengali speech 2023 competition data
     log_title_with_multiple_lines("Reading data, tokenizer, and feature extractor.")
     dataset = read_bengaliai_speech_2023_using_hf_datasets(path_to_data="data/bengaliai-speech")
+    data_set_openslr = load_dataset("openslr", "SLR53", split="train")
+
+    # keep only audio column from data_set_openslr
+    dataset["train"] = data_set_openslr.remove_columns(["path"])
+    dataset = dataset.cast_column("audio", Audio(sampling_rate=DEFAULT_RATE))
+
+    ######################### DATA PREPROCESSING #########################
     if args.num_shards_train:
         dataset["train"] = dataset["train"].shard(num_shards=args.num_shards_train, index=args.shard_index_train)
     if args.num_shards_validation:
@@ -129,12 +140,12 @@ if __name__ == "__main__":
         duration = batch["audio"]["array"].shape[0] / batch["audio"]["sampling_rate"]
         return args.min_sec < duration < args.max_sec
 
-    if args.min_sec and args.max_sec:
-        dataset["train"] = dataset["train"].filter(filter_by_length, num_proc=args.num_proc)
-        logger.info("After filtering:")
-        logger.info(dataset)
-    else:
-        logger.info("Skip filtering... (min_sec and max_sec are not set)")
+    # if args.min_sec and args.max_sec:
+    dataset["train"] = dataset["train"].filter(filter_by_length, num_proc=args.num_proc)
+    logger.info("After filtering:")
+    logger.info(dataset)
+    # else:
+    # logger.info("Skip filtering... (min_sec and max_sec are not set)")
 
     def prepare_dataset(batch):
         batch["input_values"] = feature_extractor(batch["audio"]["array"], sampling_rate=batch["audio"]["sampling_rate"]).input_values[0]
@@ -143,7 +154,7 @@ if __name__ == "__main__":
         return batch
 
     dataset = dataset.map(prepare_dataset, remove_columns=dataset["train"].column_names, num_proc=args.num_proc, writer_batch_size=1000)
-
+    logger.info(dataset)
     logger.info("Done preparing dataset.")
 
     ######################### LOAD MODEL AND TRAIN #########################

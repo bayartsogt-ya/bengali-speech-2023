@@ -215,12 +215,12 @@ if __name__ == "__main__":
         metrics = train_result.metrics
         trainer.log_metrics("train", metrics)
         trainer.save_metrics("train", metrics)
-        trainer.save_model()
-        trainer.save_state()
     except KeyboardInterrupt:
         print('KEYBOARD INTERRUPTED! Starting evaluation with current state')
         trainer.is_in_train = False
 
+    trainer.save_model()
+    trainer.save_state()
     log_title_with_multiple_lines("Done Training and Uploading Output")
 
     if args.to_kaggle:

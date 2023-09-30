@@ -96,6 +96,7 @@ if __name__ == "__main__":
         # report
         push_to_hub=args.push_to_hub,
         metric_for_best_model="eval_validation_wer",
+        greater_is_better=False,
         report_to=["tensorboard", "wandb"],
         # report_to="none",
         run_name=experiment_name,
@@ -114,6 +115,14 @@ if __name__ == "__main__":
     config = AutoConfig.from_pretrained(args.base_model_name)
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, **tokenizer_kwargs)
     feature_extractor = AutoFeatureExtractor.from_pretrained(args.base_model_name)
+
+    config.update(
+        {
+            "ctc_loss_reduction": "mean",
+            "pad_token_id": tokenizer.pad_token_id,
+            "vocab_size": len(tokenizer),
+        }
+    )
 
     # save to output dir
     config.save_pretrained(training_args.output_dir)

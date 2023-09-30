@@ -93,6 +93,8 @@ if __name__ == "__main__":
         load_best_model_at_end=True,
         log_level="debug",
 
+        lr_scheduler_type="cosine",
+
         # report
         push_to_hub=args.push_to_hub,
         metric_for_best_model="eval_validation_wer",

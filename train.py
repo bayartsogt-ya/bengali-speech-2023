@@ -1,23 +1,24 @@
 """Entry point for training the model."""
 
+import json
 import os
 import re
 import argparse
 import logging
 from bengali_speech.datasets import read_bengaliai_speech_2023_using_hf_datasets
-from bengali_speech.mappers import get_filter_by_length_func, get_prepare_dataset_func
-from bengali_speech.tokenizers import get_default_wav2vec_tokenizer
+from bengali_speech.tokenizers import dump_default_ood_vocab
 from bengali_speech.data_collators import DataCollatorCTCWithPadding
 from bengali_speech.evaluate import get_compute_metrics_func
 from bengali_speech.kaggle import upload_to_kaggle
 from bengali_speech.utils import log_title_with_multiple_lines
 
 
-from transformers import AutoFeatureExtractor, Wav2Vec2Processor, Wav2Vec2ForCTC, AutoTokenizer
+from transformers import AutoFeatureExtractor, AutoModelForCTC, AutoTokenizer, AutoConfig, AutoProcessor
 from transformers import Trainer
 from transformers import TrainingArguments
 
-from datasets import load_dataset, Audio
+from datasets import load_dataset, Audio, load_from_disk
+from bnunicodenormalizer import Normalizer
 
 
 DEFAULT_RATE = 16_000
@@ -44,6 +45,7 @@ if __name__ == "__main__":
     parser.add_argument("--to_kaggle", action="store_true")
     parser.add_argument("--push_to_hub", action="store_true")
     parser.add_argument("--fp16", action="store_true")
+    parser.add_argument("--resume_from_checkpoint", type=str, default=None)
 
     # preprocessing args
     parser.add_argument("--min_sec", type=float, default=2.)
@@ -71,19 +73,19 @@ if __name__ == "__main__":
         dataloader_num_workers=args.dataloader_num_workers,
         
         # LR
-        learning_rate=3e-4,
-        weight_decay=0.005,
+        learning_rate=3e-5,
+        # weight_decay=0.005,
         warmup_ratio=0.1,
         # warmup_steps=500,
 
         # EVAL & SAVE
-        logging_steps=100,
+        logging_steps=200,
         
         evaluation_strategy="steps",
-        eval_steps=500,
+        eval_steps=2000,  # means that every 16k examples will be evaluated
 
         save_strategy="steps",
-        save_steps=500,
+        save_steps=2000,
         save_total_limit=3,
         
         fp16=args.fp16,
@@ -99,40 +101,72 @@ if __name__ == "__main__":
         run_name=experiment_name,
     )
 
+    ######################### ALL HUGGINGFACE CONFIG FIRST #########################
+    log_title_with_multiple_lines("Loading hugginface config, tokenizer, and feature extractor.")
+    # load tokenizer
+    tokenizer_name = args.tokenizer_name
+    tokenizer_kwargs = {}
+    if tokenizer_name is None:
+        tokenizer_name = training_args.output_dir
+        tokenizer_kwargs = dump_default_ood_vocab(training_args.output_dir, args.base_model_name)
+
+    # load config, tokenizer, and feature extractor
+    config = AutoConfig.from_pretrained(args.base_model_name)
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, **tokenizer_kwargs)
+    feature_extractor = AutoFeatureExtractor.from_pretrained(args.base_model_name)
+
+    # save to output dir
+    config.save_pretrained(training_args.output_dir)
+    tokenizer.save_pretrained(training_args.output_dir)
+    feature_extractor.save_pretrained(training_args.output_dir)
+
+    processor = AutoProcessor.from_pretrained(training_args.output_dir)
+    data_collator = DataCollatorCTCWithPadding(processor=processor)
+
+    # load model
+    model = AutoModelForCTC.from_pretrained(
+        args.base_model_name,
+        ctc_loss_reduction="mean", 
+        pad_token_id=processor.tokenizer.pad_token_id,
+        vocab_size=len(processor.tokenizer),
+        ignore_mismatched_sizes=True,
+    )
+
+    if hasattr(model, "freeze_feature_encoder") and args.wav2vec_freeze_feature_extractor:
+        logger.info("Freezing a feature extractor.")
+        model.freeze_feature_encoder()
+
     ######################### LOAD DATA #########################
+    # if args.path_to_load_from_disk:
+    #     dataset = load_from_disk(args.path_to_load_from_disk)
+    # else:
+    ##################### <-------------------------
     # read bengali speech 2023 competition data
     log_title_with_multiple_lines("Reading data, tokenizer, and feature extractor.")
     dataset = read_bengaliai_speech_2023_using_hf_datasets(path_to_data="data/bengaliai-speech")
-    data_set_openslr = load_dataset("openslr", "SLR53", split="train")
-
-    # keep only audio column from data_set_openslr
-    dataset["train"] = data_set_openslr.remove_columns(["path"])
+    # # use_open_slr = True
+    # data_set_openslr = load_dataset("openslr", "SLR53", split="train")
+    # dataset["train"] = data_set_openslr.remove_columns(["path"])
     dataset = dataset.cast_column("audio", Audio(sampling_rate=DEFAULT_RATE))
 
-    ######################### DATA PREPROCESSING #########################
+    logger.info(dataset)
+
     if args.num_shards_train:
         dataset["train"] = dataset["train"].shard(num_shards=args.num_shards_train, index=args.shard_index_train)
     if args.num_shards_validation:
         dataset["validation"] = dataset["validation"].shard(num_shards=args.num_shards_validation, index=args.shard_index_validation)
     logger.info(dataset)
 
-    # load tokenizer
-    if args.tokenizer_name:
-        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name)
-    else:
-        tokenizer = get_default_wav2vec_tokenizer()
-
-    feature_extractor = AutoFeatureExtractor.from_pretrained(args.base_model_name)
-    processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
-
+    ######################### DATA PREPROCESSING #########################
     keep_chars = "".join(tokenizer.vocab)
-    logger.critical("Keep only following characters: %s", keep_chars)
+    logger.critical(f"Keep only following characters: {tokenizer.vocab}, Vocab size: {len(tokenizer.vocab)}")
 
-    def clean_text(batch):
+    def clean_text(batch, bnorm: Normalizer):
+        batch["sentence"] = " ".join([bnorm(word)["normalized"] for word in batch["sentence"].split()])
         batch["sentence"] = re.sub(f"[^{keep_chars}]", "", batch["sentence"])
         return batch
 
-    dataset = dataset.map(clean_text, num_proc=args.num_proc)
+    dataset = dataset.map(clean_text, num_proc=args.num_proc, fn_kwargs={"bnorm": Normalizer()})
     logger.info("After cleaning:")
     logger.info(dataset)
 
@@ -157,24 +191,10 @@ if __name__ == "__main__":
     logger.info(dataset)
     logger.info("Done preparing dataset.")
 
+    # dataset.save_to_disk(os.path.join("disk_dataset", "bengaliai-speech"))
+    ##################### <-------------------------
+
     ######################### LOAD MODEL AND TRAIN #########################
-    # data collator
-    data_collator = DataCollatorCTCWithPadding(processor=processor)
-
-    log_title_with_multiple_lines("Loading Model and Start Training.")
-    # load model
-    model = Wav2Vec2ForCTC.from_pretrained(
-        args.base_model_name,
-        ctc_loss_reduction="mean", 
-        pad_token_id=processor.tokenizer.pad_token_id,
-        vocab_size=len(processor.tokenizer),
-        ignore_mismatched_sizes=True,
-    )
-
-    if hasattr(model, "freeze_feature_encoder") and args.wav2vec_freeze_feature_extractor:
-        logger.info("Freezing a feature extractor.")
-        model.freeze_feature_encoder()
-
     trainer = Trainer(
         model=model,
         data_collator=data_collator,
@@ -189,13 +209,21 @@ if __name__ == "__main__":
     )
 
     logger.info("Start training...")
-    train_result = trainer.train()
+    try:
+        trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
+        train_result = trainer.train()
+        metrics = train_result.metrics
+        trainer.log_metrics("train", metrics)
+        trainer.save_metrics("train", metrics)
+        trainer.save_model()
+        trainer.save_state()
+    except KeyboardInterrupt:
+        print('KEYBOARD INTERRUPTED! Starting evaluation with current state')
+        trainer.is_in_train = False
 
     log_title_with_multiple_lines("Done Training and Uploading Output")
 
-    tokenizer.save_pretrained(training_args.output_dir)
-    trainer.model.save_pretrained(training_args.output_dir)
-    feature_extractor.save_pretrained(training_args.output_dir)
-
     if args.to_kaggle:
         upload_to_kaggle(experiment_name)
+
+    log_title_with_multiple_lines("Done Uploading Output to Kaggle")

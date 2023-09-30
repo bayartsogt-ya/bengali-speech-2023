@@ -211,8 +211,7 @@ if __name__ == "__main__":
 
     logger.info("Start training...")
     try:
-        trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
-        train_result = trainer.train()
+        train_result = trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
         metrics = train_result.metrics
         trainer.log_metrics("train", metrics)
         trainer.save_metrics("train", metrics)

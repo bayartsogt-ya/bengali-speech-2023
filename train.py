@@ -162,7 +162,8 @@ if __name__ == "__main__":
     logger.critical(f"Keep only following characters: {tokenizer.vocab}, Vocab size: {len(tokenizer.vocab)}")
 
     def clean_text(batch, bnorm: Normalizer):
-        batch["sentence"] = " ".join([bnorm(word)["normalized"] for word in batch["sentence"].split()])
+        normalized_list = [bnorm(word)["normalized"] for word in batch["sentence"].split()]
+        batch["sentence"] = " ".join([x for x in normalized_list if x])
         batch["sentence"] = re.sub(f"[^{keep_chars}]", "", batch["sentence"])
         return batch
 

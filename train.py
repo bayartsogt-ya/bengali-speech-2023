@@ -174,7 +174,7 @@ if __name__ == "__main__":
 
     def clean_text(batch, bnorm: Normalizer):
         normalized_list = [bnorm(word)["normalized"] for word in batch["sentence"].split()]
-        batch["sentence"] = " ".join([x for x in normalized_list if x])
+        batch["sentence"] = "|".join([x for x in normalized_list if x])
         batch["sentence"] = re.sub(f"[^{keep_chars}]", "", batch["sentence"])
         return batch
 

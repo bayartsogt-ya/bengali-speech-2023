@@ -74,3 +74,19 @@ def read_bengaliai_speech_2023_using_hf_datasets(path_to_data: str) -> DatasetDi
     logger.info(f"Done reading Bengali Speech 2023 competition data in {time.time() - st:.2f}s")
 
     return dataset
+
+def read_madasr2023(path_to_data:str) -> DatasetDict:
+    st = time.time()
+    logger.info("Reading MADASR2023 competition data...")
+
+    ds_train = load_dataset("csv", data_files=[f"{path_to_data}/train.tsv"], split="train", delimiter="\t")
+    ds_dev = load_dataset("csv", data_files=[f"{path_to_data}/dev.tsv"], split="train", delimiter="\t")
+
+    dataset = DatasetDict({
+        "train": ds_train,
+        "validation": ds_dev,
+    })
+
+    logger.info(dataset)
+    logger.info(f"Done reading MADASR2023 competition data in {time.time() - st:.2f}s")
+    return dataset

@@ -1,5 +1,5 @@
 kaggle
-transformers[torch]
+transformers[torch]==4.33.0
 datasets
 evaluate
 huggingface_hub
@@ -10,3 +10,6 @@ librosa
 soundfile
 bnunicodenormalizer
 tabulate
+
+audiomentations
+pyroomacoustics

@@ -165,3 +165,7 @@ wandb/
 notebooks/
 
 .python-version
+
+transformers_scripts/
+cache/
+pretrained_models
